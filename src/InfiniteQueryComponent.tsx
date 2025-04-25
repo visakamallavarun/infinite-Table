@@ -1,7 +1,7 @@
 import { Table } from 'antd';
 import { useInfiniteQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface Item {
   id: number;
@@ -18,17 +18,8 @@ interface ApiResponse {
   hasPreviousPage: boolean;
 }
 
-interface ItemFilters {
-  search?: string;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
-}
-
 // Mock fetch function to simulate API call
-const fetchItems = async (
-  pageParam = 1,
-  filters: ItemFilters = {}
-): Promise<ApiResponse> => {
+const fetchItems = async (pageParam = 1): Promise<ApiResponse> => {
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 500));
   
@@ -42,7 +33,7 @@ const fetchItems = async (
   for (let i = 0; i < pageSize; i++) {
     const id = start + i;
     if (id <= totalRecords) {
-      items.push({ id, name: `Item ${id}${filters.search ? ` (matching: ${filters.search})` : ''}` });
+      items.push({ id, name: `Item ${id}` });
     }
   }
   
@@ -57,16 +48,15 @@ const fetchItems = async (
   };
 };
 
-export const useItemsQuery = (filters: ItemFilters = {}) =>
+export const useItemsQuery = () =>
   useInfiniteQuery({
-    queryKey: ['items', filters],
-    queryFn: ({ pageParam }) => fetchItems(pageParam, filters),
-    initialPageParam: 1,
+    queryKey: ['items'],
+    queryFn: ({ pageParam }) => fetchItems(pageParam),
+    initialPageParam: 10,
     getPreviousPageParam: (firstPage) =>
       firstPage.hasPreviousPage ? firstPage.page - 1 : undefined,
     getNextPageParam: (lastPage) =>
       lastPage.hasNextPage ? lastPage.page + 1 : undefined,
-    maxPages: 3
   });
 
 const queryClient = new QueryClient();
@@ -81,9 +71,7 @@ export default function InfiniteQueryComponent() {
 }
 
 function InfiniteQueryContent() {
-  const [filters, setFilters] = useState<ItemFilters>({});
-  const [searchInput, setSearchInput] = useState('');
-  
+  const [oldScrollHeight, setOldScrollHeight] = useState<number | null>(null);
   const {
     data,
     fetchNextPage,
@@ -93,14 +81,7 @@ function InfiniteQueryContent() {
     isFetchingNextPage,
     isFetchingPreviousPage,
     status,
-  } = useItemsQuery(filters);
-
-  const handleSearch = () => {
-    setFilters(prev => ({
-      ...prev,
-      search: searchInput
-    }));
-  };
+  } = useItemsQuery();
 
   const columns = [
     {
@@ -117,19 +98,33 @@ function InfiniteQueryContent() {
 
   const dataSource = data?.pages.flatMap((page) => page.item);
 
+  const handleTableScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+
+    if (scrollTop < 500 && hasPreviousPage && !isFetchingPreviousPage) {
+      setOldScrollHeight(scrollHeight);
+      fetchPreviousPage();
+    }
+
+    if (scrollHeight - scrollTop - clientHeight < 500 && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  };
+
+  useEffect(() => {
+    if (oldScrollHeight && !isFetchingPreviousPage) {
+      const tableBody = document.querySelector('.ant-table-body') as HTMLDivElement;
+      if (tableBody) {
+        const heightDiff = tableBody.scrollHeight - oldScrollHeight;
+        tableBody.scrollTop += heightDiff;
+      }
+      setOldScrollHeight(null);
+    }
+  }, [isFetchingPreviousPage, oldScrollHeight]);
+  
   return (
     <div className="infinite-query-container">
       <h2>Infinite Query Example</h2>
-      
-      <div className="filters">
-        <input 
-          type="text" 
-          value={searchInput} 
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search items"
-        />
-        <button onClick={handleSearch}>Search</button>
-      </div>
       
       {status === 'pending' ? (
         <div>Loading...</div>
@@ -142,30 +137,10 @@ function InfiniteQueryContent() {
             dataSource={dataSource}
             rowKey="id"
             pagination={false}
+            scroll={{ y: 300 }}
+            size='small'
+            onScroll={handleTableScroll}
           />
-          <div className="load-more">
-            <button
-              onClick={() => fetchPreviousPage()}
-              disabled={!hasPreviousPage || isFetchingPreviousPage}
-            >
-              {isFetchingPreviousPage
-                ? 'Loading previous...'
-                : hasPreviousPage
-                ? 'Load Previous'
-                : 'No previous page'}
-            </button>
-            <button
-              onClick={() => fetchNextPage()}
-              disabled={!hasNextPage || isFetchingNextPage}
-            >
-              {isFetchingNextPage
-                ? 'Loading more...'
-                : hasNextPage
-                ? 'Load More'
-                : 'No more items to load'}
-            </button>
-          </div>
-          
           <div className="stats">
             <p>Total records: {data.pages[0].totalRecords}</p>
             <p>Pages loaded: {data.pages.length}</p>
