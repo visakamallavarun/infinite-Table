@@ -1,7 +1,7 @@
 import { Table } from 'antd';
 import { useInfiniteQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 interface Item {
   id: number;
@@ -21,7 +21,7 @@ interface ApiResponse {
 // Mock fetch function to simulate API call
 const fetchItems = async (pageParam = 1): Promise<ApiResponse> => {
   // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 5000));
   
   // Calculate start and end items for this page
   const pageSize = 10;
@@ -52,11 +52,12 @@ export const useItemsQuery = () =>
   useInfiniteQuery({
     queryKey: ['items'],
     queryFn: ({ pageParam }) => fetchItems(pageParam),
-    initialPageParam: 10,
+    initialPageParam: 1,
     getPreviousPageParam: (firstPage) =>
       firstPage.hasPreviousPage ? firstPage.page - 1 : undefined,
     getNextPageParam: (lastPage) =>
       lastPage.hasNextPage ? lastPage.page + 1 : undefined,
+    maxPages:3
   });
 
 const queryClient = new QueryClient();
@@ -71,15 +72,12 @@ export default function InfiniteQueryComponent() {
 }
 
 function InfiniteQueryContent() {
-  const [oldScrollHeight, setOldScrollHeight] = useState<number | null>(null);
+  const [scrollMetrics, setScrollMetrics] = useState({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 });
   const {
     data,
     fetchNextPage,
-    fetchPreviousPage,
     hasNextPage,
-    hasPreviousPage,
     isFetchingNextPage,
-    isFetchingPreviousPage,
     status,
   } = useItemsQuery();
 
@@ -101,29 +99,18 @@ function InfiniteQueryContent() {
   const handleTableScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
 
-    if (scrollTop < 500 && hasPreviousPage && !isFetchingPreviousPage) {
-      setOldScrollHeight(scrollHeight);
-      fetchPreviousPage();
-    }
+    setScrollMetrics({ scrollTop, scrollHeight, clientHeight });
+    console.log('scrollTop:', scrollTop);
+    console.log('scrollHeight:', scrollHeight); 
+    console.log('clientHeight:', clientHeight);
 
-    if (scrollHeight - scrollTop - clientHeight < 500 && hasNextPage && !isFetchingNextPage) {
+    if (scrollHeight - scrollTop - clientHeight < 50 && hasNextPage && !isFetchingNextPage) {
       fetchNextPage();
     }
   };
-
-  useEffect(() => {
-    if (oldScrollHeight && !isFetchingPreviousPage) {
-      const tableBody = document.querySelector('.ant-table-body') as HTMLDivElement;
-      if (tableBody) {
-        const heightDiff = tableBody.scrollHeight - oldScrollHeight;
-        tableBody.scrollTop += heightDiff;
-      }
-      setOldScrollHeight(null);
-    }
-  }, [isFetchingPreviousPage, oldScrollHeight]);
   
   return (
-    <div className="infinite-query-container">
+    <div className="infinite-query-container" style={{ padding: '90px' }}>
       <h2>Infinite Query Example</h2>
       
       {status === 'pending' ? (
@@ -132,6 +119,22 @@ function InfiniteQueryContent() {
         <div>Error loading data</div>
       ) : (
         <>
+          <div className="scroll-metrics" style={{ 
+            position: 'sticky', 
+            top: 0, 
+            padding: '10px', 
+            marginBottom: '10px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            zIndex: 1
+          }}>
+            <p><strong>Scroll Metrics:</strong></p>
+            <p>scrollTop: {scrollMetrics.scrollTop.toFixed(0)}</p>
+            <p>scrollHeight: {scrollMetrics.scrollHeight.toFixed(0)}</p>
+            <p>clientHeight: {scrollMetrics.clientHeight.toFixed(0)}</p>
+            <p>remaining: {(scrollMetrics.scrollHeight - scrollMetrics.scrollTop - scrollMetrics.clientHeight).toFixed(0)}</p>
+          </div>
+          
           <Table
             columns={columns}
             dataSource={dataSource}
@@ -139,6 +142,7 @@ function InfiniteQueryContent() {
             pagination={false}
             scroll={{ y: 300 }}
             size='small'
+            virtual
             onScroll={handleTableScroll}
           />
           <div className="stats">
