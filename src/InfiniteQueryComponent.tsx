@@ -1,7 +1,7 @@
 import { Table } from 'antd';
 import { useInfiniteQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { useState } from 'react';
+import { useState,useLayoutEffect } from 'react';
 
 interface Item {
   id: number;
@@ -17,6 +17,9 @@ interface ApiResponse {
   hasNextPage: boolean;
   hasPreviousPage: boolean;
 }
+
+const PAGE_SIZE = 10;
+const MAX_PAGES = 3;
 
 // Mock fetch function to simulate API call
 const fetchItems = async (pageParam = 1): Promise<ApiResponse> => {
@@ -52,12 +55,12 @@ export const useItemsQuery = () =>
   useInfiniteQuery({
     queryKey: ['items'],
     queryFn: ({ pageParam }) => fetchItems(pageParam),
-    initialPageParam: 1,
+    initialPageParam: 10,
     getPreviousPageParam: (firstPage) =>
       firstPage.hasPreviousPage ? firstPage.page - 1 : undefined,
     getNextPageParam: (lastPage) =>
       lastPage.hasNextPage ? lastPage.page + 1 : undefined,
-    maxPages:3
+    maxPages: 3
   });
 
 const queryClient = new QueryClient();
@@ -72,12 +75,18 @@ export default function InfiniteQueryComponent() {
 }
 
 function InfiniteQueryContent() {
-  const [scrollMetrics, setScrollMetrics] = useState({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 });
+  const [scrollMetrics, setScrollMetrics] = useState({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 , isDown: true});
+  //const tableBodyRef = useRef<HTMLDivElement | null>(null);
+
+
   const {
     data,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    fetchPreviousPage,
+    isFetchingPreviousPage,
+    hasPreviousPage,
     status,
   } = useItemsQuery();
 
@@ -95,20 +104,39 @@ function InfiniteQueryContent() {
   ];
 
   const dataSource = data?.pages.flatMap((page) => page.item);
+  //   tableBody.scrollTo({
+    //   top: ((MAX_PAGES-1)*PAGE_SIZE*scrollMetrics.scrollHeight/(MAX_PAGES*PAGE_SIZE))-50,
+    //   behavior: 'smooth',
+    // })
+
+  // Attach ref to the AntD Table body after render
+  useLayoutEffect(() => {
+    const tableBody = document.querySelector('.ant-table-tbody-virtual-holder') as HTMLDivElement | null;
+    // if (tableBody && (data?.pages?.length ?? 0) >= 3 && !isFetchingNextPage && scrollMetrics.isDown) {
+    // console.log("scrollDirection",scrollMetrics.isDown)
+    //   tableBody.scrollTop = ((MAX_PAGES-1)*PAGE_SIZE*scrollMetrics.scrollHeight/(MAX_PAGES*PAGE_SIZE))-50
+    // }
+    if (tableBody && !isFetchingPreviousPage )  {
+      tableBody.scrollTop = (scrollMetrics.scrollHeight/MAX_PAGES)
+      console.log("scrolTop",tableBody.scrollTop)
+    }
+    
+  }, [data, isFetchingNextPage,isFetchingPreviousPage,scrollMetrics.scrollHeight]);
+
 
   const handleTableScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
 
-    setScrollMetrics({ scrollTop, scrollHeight, clientHeight });
-    console.log('scrollTop:', scrollTop);
-    console.log('scrollHeight:', scrollHeight); 
-    console.log('clientHeight:', clientHeight);
+    setScrollMetrics({ scrollTop, scrollHeight, clientHeight, isDown: scrollTop-scrollMetrics.scrollTop>0 });
 
     if (scrollHeight - scrollTop - clientHeight < 50 && hasNextPage && !isFetchingNextPage) {
       fetchNextPage();
     }
+    if (scrollTop < 50 && hasPreviousPage && !isFetchingPreviousPage) {
+      fetchPreviousPage();
+    }
   };
-  
+
   return (
     <div className="infinite-query-container" style={{ padding: '90px' }}>
       <h2>Infinite Query Example</h2>
@@ -132,7 +160,8 @@ function InfiniteQueryContent() {
             <p>scrollTop: {scrollMetrics.scrollTop.toFixed(0)}</p>
             <p>scrollHeight: {scrollMetrics.scrollHeight.toFixed(0)}</p>
             <p>clientHeight: {scrollMetrics.clientHeight.toFixed(0)}</p>
-            <p>remaining: {(scrollMetrics.scrollHeight - scrollMetrics.scrollTop - scrollMetrics.clientHeight).toFixed(0)}</p>
+            <p>Scoll Direction:{scrollMetrics.isDown ? "True":"False"}</p>
+            {/* <p>remaining: {(scrollMetrics.scrollHeight - scrollMetrics.scrollTop - scrollMetrics.clientHeight).toFixed(0)}</p> */}
           </div>
           
           <Table
