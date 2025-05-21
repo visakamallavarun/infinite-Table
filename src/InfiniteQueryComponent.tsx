@@ -18,8 +18,8 @@ interface ApiResponse {
   hasPreviousPage: boolean;
 }
 
-const PAGE_SIZE = 200;
-const MAX_PAGES = 3;
+const PAGE_SIZE = 100;
+const MAX_PAGES = 10;
 
 // Mock fetch function to simulate API call
 const fetchItems = async (pageParam = 1): Promise<ApiResponse> => {
@@ -111,7 +111,6 @@ function InfiniteQueryContent() {
     }
     const tableBody = tableBodyRef.current;
     const pageParams = data?.pageParams as number[] | undefined;
-    console.log("pageParams",pageParams,prevPageParams.current)
       if (
       tableBody &&
       pageParams &&
