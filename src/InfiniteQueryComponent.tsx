@@ -1,7 +1,7 @@
 import { Table } from 'antd';
 import { useInfiniteQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { useState,useLayoutEffect, useRef, useEffect } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 
 interface Item {
   id: number;
@@ -18,7 +18,7 @@ interface ApiResponse {
   hasPreviousPage: boolean;
 }
 
-// const PAGE_SIZE = 10;
+const PAGE_SIZE = 200;
 const MAX_PAGES = 3;
 
 // Mock fetch function to simulate API call
@@ -27,9 +27,9 @@ const fetchItems = async (pageParam = 1): Promise<ApiResponse> => {
   await new Promise(resolve => setTimeout(resolve, 500));
   
   // Calculate start and end items for this page
-  const pageSize = 10;
+  const pageSize = PAGE_SIZE;
   const start = (pageParam - 1) * pageSize + 1;
-  const totalRecords = 300;
+  const totalRecords = 10000;
   
   // Create items for this page
   const items: Item[] = [];
@@ -44,7 +44,7 @@ const fetchItems = async (pageParam = 1): Promise<ApiResponse> => {
     item: items,
     totalRecords: totalRecords,
     pageNumber: pageParam,
-    pageSize: 10,
+    pageSize: PAGE_SIZE,
     page: pageParam,
     hasNextPage: pageParam * pageSize < totalRecords,
     hasPreviousPage: pageParam > 1
@@ -60,7 +60,7 @@ export const useItemsQuery = () =>
       firstPage.hasPreviousPage ? firstPage.page - 1 : undefined,
     getNextPageParam: (lastPage) =>
       lastPage.hasNextPage ? lastPage.page + 1 : undefined,
-    maxPages: 3
+    maxPages: MAX_PAGES
   });
 
 const queryClient = new QueryClient();
@@ -75,11 +75,9 @@ export default function InfiniteQueryComponent() {
 }
 
 function InfiniteQueryContent() {
-  const [scrollMetrics, setScrollMetrics] = useState({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 , isDown: true});
   const prevPageParams = useRef<number[]>([]);
-  const scollHeight=useRef<number>(0);
-  //const tableBodyRef = useRef<HTMLDivElement | null>(null);
-
+  const scrollHeightRef=useRef<number>(0);
+  const tableBodyRef = useRef<HTMLDivElement | null>(null);
 
   const {
     data,
@@ -106,41 +104,35 @@ function InfiniteQueryContent() {
   ];
 
   const dataSource = data?.pages.flatMap((page) => page.item);
-  //   tableBody.scrollTo({
-    //   top: ((MAX_PAGES-1)*PAGE_SIZE*scrollMetrics.scrollHeight/(MAX_PAGES*PAGE_SIZE))-50,
-    //   behavior: 'smooth',
-    // })
-    // if (tableBody && (data?.pages?.length ?? 0) >= 3 && !isFetchingNextPage && scrollMetrics.isDown) {
-    // console.log("scrollDirection",scrollMetrics.isDown)
-    //   tableBody.scrollTop = ((MAX_PAGES-1)*PAGE_SIZE*scrollMetrics.scrollHeight/(MAX_PAGES*PAGE_SIZE))-50
-    // }
 
-  // Attach ref to the AntD Table body after render
   useLayoutEffect(() => {
-    const tableBody = document.querySelector('.ant-table-tbody-virtual-holder') as HTMLDivElement | null;
+    if (!tableBodyRef.current) {
+      tableBodyRef.current = document.querySelector('.ant-table-tbody-virtual-holder') as HTMLDivElement | null;
+    }
+    const tableBody = tableBodyRef.current;
     const pageParams = data?.pageParams as number[] | undefined;
     console.log("pageParams",pageParams,prevPageParams.current)
-      if(tableBody && pageParams && pageParams.length === 3 && prevPageParams.current.length === 3 && !isFetchingPreviousPage && !isFetchingNextPage) {
+      if (
+      tableBody &&
+      pageParams &&
+      pageParams.length === MAX_PAGES &&
+      prevPageParams.current.length === MAX_PAGES &&
+      !isFetchingPreviousPage &&
+      !isFetchingNextPage &&
+      pageParams[0] !== prevPageParams.current[0]
+    ) {
         if (pageParams[0] < prevPageParams.current[0]) {
-          tableBody.scrollTop = (scollHeight.current/MAX_PAGES)
+          tableBody.scrollTop = (scrollHeightRef.current/MAX_PAGES)
         } else if (pageParams[0] > prevPageParams.current[0]) {
-          tableBody.scrollTop = ((MAX_PAGES-1)*scollHeight.current/(MAX_PAGES))-50
+          tableBody.scrollTop = ((MAX_PAGES-1)*scrollHeightRef.current/(MAX_PAGES))-50
         }
       }
-      prevPageParams.current = (pageParams as number[]) ?? [];  
+      prevPageParams.current = pageParams ?? [];  
     }, [data?.pageParams, isFetchingPreviousPage, isFetchingNextPage]);
-
-// useEffect(() => {
-//   // Update prevPageParams.current to current value for next render
-//   prevPageParams.current = (data?.pageParams as number[]) ?? [];
-// }, [data?.pageParams]);
 
   const handleTableScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-
-    setScrollMetrics({ scrollTop, scrollHeight, clientHeight, isDown: scrollTop-scrollMetrics.scrollTop>0 });
-    scollHeight.current=scrollHeight;
-
+    scrollHeightRef.current=scrollHeight;
     if (scrollHeight - scrollTop - clientHeight < 50 && hasNextPage && !isFetchingNextPage) {
       fetchNextPage();
     }
@@ -159,22 +151,6 @@ function InfiniteQueryContent() {
         <div>Error loading data</div>
       ) : (
         <>
-          <div className="scroll-metrics" style={{ 
-            position: 'sticky', 
-            top: 0, 
-            padding: '10px', 
-            marginBottom: '10px',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            zIndex: 1
-          }}>
-            <p><strong>Scroll Metrics:</strong></p>
-            <p>scrollTop: {scrollMetrics.scrollTop.toFixed(0)}</p>
-            <p>scrollHeight: {scrollMetrics.scrollHeight.toFixed(0)}</p>
-            <p>clientHeight: {scrollMetrics.clientHeight.toFixed(0)}</p>
-            <p>Scoll Direction:{scrollMetrics.isDown ? "True":"False"}</p>
-            {/* <p>remaining: {(scrollMetrics.scrollHeight - scrollMetrics.scrollTop - scrollMetrics.clientHeight).toFixed(0)}</p> */}
-          </div>
           
           <Table
             columns={columns}
